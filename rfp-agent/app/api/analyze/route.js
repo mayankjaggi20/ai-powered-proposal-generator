@@ -1,15 +1,8 @@
-import { client, MODEL, loadKnowledge, rfpBlock } from "@/lib/claude";
+import { client, loadSettings, buildSystem, webSearchTool, rfpBlock, extractTagged } from "@/lib/claude";
 
 export const maxDuration = 300; // web research can take a minute or two
 
-const INSTRUCTIONS = `You are the bid analyst for our company. You read an RFP, research the issuing organization on the web, and prepare the ground for a proposal.
-
-Our internal knowledge base is provided in <knowledge>. It is the only source of truth about our company: capabilities, case studies, team, certifications. Never invent facts about us.
-
-Steps:
-1. Read the RFP carefully. Extract every requirement (especially "shall", "must", "required" statements), the evaluation criteria, the required response structure, and the deadline.
-2. Run 2 to 4 focused web searches on the issuing organization: who they are, recent news or strategy, and anything about their technology landscape relevant to this RFP.
-3. Decide what you still need from the bid team. Only ask what cannot be answered from the RFP, the knowledge base, or the web: pricing, named team members, availability, win themes, assumptions, partner involvement and similar. Ask at most 8 questions, most important first, all in one batch.
+const outputFormat = (maxQuestions) => `Ask at most ${maxQuestions} questions.
 
 Finish with exactly one JSON object inside <result></result> tags and nothing after it:
 {
@@ -21,6 +14,7 @@ Finish with exactly one JSON object inside <result></result> tags and nothing af
   "fit": { "verdict": "Go" | "Go with caution" | "No-go", "reason": "one or two sentences based on our knowledge base" },
   "response_structure": ["section names the proposal must contain, in the order the RFP requires"],
   "requirements": [ { "id": "R1", "text": "requirement", "mandatory": true } ],
+  "risks": ["risky clauses or red flags in the RFP, if any"],
   "questions": [ { "id": "Q1", "question": "question for the bid team", "why": "what it unlocks in the proposal" } ]
 }`;
 
@@ -29,9 +23,9 @@ export async function POST(req) {
     const { rfp, notes } = await req.json();
     if (!rfp) return Response.json({ error: "Add an RFP first." }, { status: 400 });
 
-    const knowledge = await loadKnowledge();
-    const system = `${INSTRUCTIONS}\n\n<knowledge>\n${knowledge}\n</knowledge>`;
-    const tools = [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }];
+    const settings = await loadSettings();
+    const system = await buildSystem("analyst-instructions.md", outputFormat(settings.max_questions));
+    const tools = [webSearchTool(settings)];
 
     const messages = [
       {
@@ -46,21 +40,17 @@ export async function POST(req) {
     // Server-side web search can pause a long turn; continue it if so
     const allBlocks = [];
     for (let i = 0; i < 4; i++) {
-      const response = await client.messages.create({ model: MODEL, max_tokens: 8000, system, tools, messages });
+      const response = await client.messages.create({ model: settings.model, max_tokens: 8000, system, tools, messages });
       allBlocks.push(...response.content);
       if (response.stop_reason !== "pause_turn") break;
       messages.push({ role: "assistant", content: response.content });
     }
 
     const text = allBlocks.filter((b) => b.type === "text").map((b) => b.text).join("");
-    const match = text.match(/<result>([\s\S]*?)<\/result>/);
-    if (!match) {
-      return Response.json(
-        { error: "The agent did not return a structured analysis. Try again." },
-        { status: 502 }
-      );
+    const analysis = extractTagged(text, "result");
+    if (!analysis) {
+      return Response.json({ error: "The agent did not return a structured analysis. Try again." }, { status: 502 });
     }
-    const analysis = JSON.parse(match[1].trim());
 
     const sources = [];
     for (const b of allBlocks) {
@@ -71,7 +61,7 @@ export async function POST(req) {
       }
     }
 
-    return Response.json({ analysis, sources: sources.slice(0, 10) });
+    return Response.json({ analysis, sources: sources.slice(0, 10), checkClaims: settings.check_claims_after_draft });
   } catch (err) {
     return Response.json({ error: err.message || "Analysis failed." }, { status: 500 });
   }

@@ -137,6 +137,16 @@ details li { margin-bottom: 4px; }
 .question:first-of-type { border-top: 0; margin-top: 0; }
 .question .why { color: var(--muted); font-size: 14px; margin: 2px 0 8px; }
 
+.review { margin-top: 16px; border-radius: 8px; padding: 16px 18px; font-size: 15px; }
+.review.clean { background: var(--accent-soft); }
+.review.has-issues { background: var(--warn-soft); }
+.review-title { font-weight: 600; margin: 0; }
+.review ol { margin: 10px 0 0; padding-left: 22px; }
+.review li { margin-bottom: 12px; }
+.review q { display: block; font-family: var(--serif); }
+.review .problem { display: block; color: var(--muted); }
+.review .fix { display: block; color: var(--warn); font-weight: 500; }
+
 /* The draft reads like a document, not a UI panel */
 .paper {
   margin-top: 16px;

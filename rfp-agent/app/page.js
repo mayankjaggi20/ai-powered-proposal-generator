@@ -35,6 +35,8 @@ export default function Home() {
   const [sources, setSources] = useState([]);
   const [answers, setAnswers] = useState({});
   const [draft, setDraft] = useState("");
+  const [checkClaims, setCheckClaims] = useState(true);
+  const [review, setReview] = useState(null);
 
   const [busy, setBusy] = useState(""); // "", "analyzing", "drafting"
   const [error, setError] = useState("");
@@ -74,7 +76,27 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || `Analysis failed (${res.status}).`);
       setAnalysis(data.analysis);
       setSources(data.sources || []);
+      setCheckClaims(data.checkClaims !== false);
       setAnswers({});
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function factCheck(text) {
+    setBusy("checking");
+    setReview(null);
+    try {
+      const res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rfp, analysis, answers, draft: text }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Fact-check failed (${res.status}).`);
+      setReview(data);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -85,7 +107,9 @@ export default function Home() {
   async function writeProposal() {
     setError("");
     setDraft("");
+    setReview(null);
     setBusy("drafting");
+    let finished = "";
     try {
       const res = await fetch("/api/draft", {
         method: "POST",
@@ -102,11 +126,12 @@ export default function Home() {
         text += decoder.decode(value, { stream: true });
         setDraft(text);
       }
+      finished = text;
     } catch (e) {
       setError(e.message);
-    } finally {
-      setBusy("");
     }
+    setBusy("");
+    if (finished && checkClaims) await factCheck(finished);
   }
 
   async function copyDraft() {
@@ -208,6 +233,13 @@ export default function Home() {
               )}
             </details>
 
+            {analysis.risks?.length > 0 && (
+              <details>
+                <summary>Risks and red flags ({analysis.risks.length})</summary>
+                <ul>{analysis.risks.map((r, i) => <li key={i}>{r}</li>)}</ul>
+              </details>
+            )}
+
             <details>
               <summary>Requirements found ({analysis.requirements?.length || 0})</summary>
               <ul>
@@ -258,7 +290,7 @@ export default function Home() {
           <span className="step-num">3</span>
           <div>
             <h2>Review the draft</h2>
-            <p>Plain text, ending with a compliance check against every requirement.</p>
+            <p>Plain text with a compliance check, then an automatic check for unsupported claims.</p>
           </div>
         </div>
 
@@ -271,7 +303,34 @@ export default function Home() {
               <button className="secondary" onClick={downloadDraft} disabled={busy === "drafting"}>
                 Download .txt
               </button>
+              <button className="secondary" onClick={() => factCheck(draft)} disabled={!!busy}>
+                {busy === "checking" ? "Checking…" : "Check claims"}
+              </button>
             </div>
+
+            {busy === "checking" && (
+              <p className="status" role="status">Checking every claim against the knowledge base, RFP and your answers.</p>
+            )}
+            {review && (
+              <div className={`review ${review.issues?.length ? "has-issues" : "clean"}`}>
+                <p className="review-title">
+                  {review.issues?.length
+                    ? `${review.issues.length} claim${review.issues.length > 1 ? "s" : ""} to fix before sending`
+                    : "No unsupported claims found"}
+                </p>
+                {review.issues?.length > 0 && (
+                  <ol>
+                    {review.issues.map((it, i) => (
+                      <li key={i}>
+                        <q>{it.claim}</q>
+                        <span className="problem">{it.problem}</span>
+                        {it.fix && <span className="fix">Fix: {it.fix}</span>}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
             <div className="paper" ref={paperRef}>{draft}</div>
           </>
         )}

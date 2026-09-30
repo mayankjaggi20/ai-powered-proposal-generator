@@ -1,8 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Make sure the knowledge folder is bundled with the API functions on Vercel
+  // Bundle the knowledge and config folders with the API functions on Vercel
   outputFileTracingIncludes: {
-    "/api/**": ["./knowledge/**"],
+    "/api/**": ["./knowledge/**", "./config/**"],
   },
 };
 export default nextConfig;

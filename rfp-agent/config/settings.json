@@ -1,0 +1,8 @@
+{
+  "model": "claude-sonnet-5-5",
+  "max_web_searches": 4,
+  "max_questions": 8,
+  "blocked_domains": [],
+  "allowed_domains": [],
+  "check_claims_after_draft": true
+}

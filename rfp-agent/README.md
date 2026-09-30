@@ -11,7 +11,11 @@ Run locally
 Deploy to Vercel
 1. Push this folder to a private GitHub repo
 2. vercel.com, Add New Project, import the repo (framework: Next.js, detected automatically)
-3. Settings, Environment Variables: ANTHROPIC_API_KEY (optional: CLAUDE_MODEL)
+3. Settings, Environment Variables: ANTHROPIC_API_KEY
 4. Deploy
 
 Anthropic Console: web search must be enabled for your organization, or analysis will fail.
+
+Configure the agent
+All instructions, guardrails and settings are in /config. See config/README.md.
+Company facts, case studies and past proposals go in /knowledge.
